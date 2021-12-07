@@ -1,0 +1,75 @@
+# Deposition of Carbon Atoms in Metal (Ni/Cu/Pd) Substrate to form Graphene Sheet
+#Author: Md Tusher Ahmed
+#Created for MSE485 Project
+
+# ---------- Initialize Simulation --------------------- 
+clear 
+units metal 
+dimension 3 
+boundary p p f
+atom_style atomic 
+atom_modify map array
+
+variable temp equal 1200
+
+# ---------- Create Atoms --------------------- 
+
+region	box block -25 25 -25 25 -5 12 units box
+create_box 2 box
+
+lattice custom 3.639087457 a1 0.5 0.5 0.0 a2 0.0 0.5 0.5 a3 0.5 0.0 0.5 &
+                    basis 0.0 0.0 0.0 
+                    
+                    
+region	substrate block -25 25 -25 25 -5 5 units box
+create_atoms 1 region	substrate
+#replicate 1 1 1
+
+# ---------- Define Interatomic Potential --------------------- 
+
+pair_style hybrid eam/alloy airebo 2.5 1 0 lj/cut 5.0 
+
+# NULL says that those type atoms don't participate
+pair_coeff * * eam/alloy Cu_Zhou04.eam.alloy Cu NULL
+#pair_coeff * * airebo ../../../potentials/CH.airebo NULL C
+pair_coeff * * airebo CH.airebo NULL C
+pair_coeff 1 2 lj/cut 0.02578 3.0825
+
+mass 1 63.5
+mass 2 12.0
+
+# skin = 2.0, and bin algorithm is used to build the neighbor list
+neighbor 2.0 bin 
+
+# Delay building neighbor list every 10 time steps. Only build if an atoms moved more than the skin
+neigh_modify delay 10 check yes  
+
+group addatoms type 2
+region mobile block -25 25 -25 25 5 INF units box 
+group mobile region mobile
+
+write_dump all atom dump_initial_Trial.atom
+
+compute add addatoms temp
+compute_modify	add dynamic/dof yes extra/dof 0
+
+fix		1 addatoms nve
+#fix		2 mobile langevin 1.0 1.0 0.1 587283
+fix 2 all langevin ${temp} ${temp} 1 498094 zero yes
+#fix 2 all temp/berendsen ${temp} ${temp} 100.0
+fix		3 mobile nve
+
+region          slab block -25 25 -25 25 5 10 units box
+fix		4 addatoms deposit 1000 2 100 12345 region slab &
+                vz -1.0 -1.0
+fix		5 addatoms wall/reflect zhi EDGE
+
+thermo_style	custom step atoms temp epair etotal press
+thermo          1000
+thermo_modify	lost ignore temp add
+
+dump		1 all atom 50 dump.deposit.atom
+# dump        1 all atom 100000 dump_last.deposit.atom 
+# dump        1 all atom 100000 deposit.xtc
+
+run             100000
